@@ -111,6 +111,10 @@ runs:
       uses: dart-lang/setup-dart@v1
       with:
         sdk: stable
+        # The setup-dart action resolves its problem matcher relative to
+        # github.action_path. Inside a composite action that path is this
+        # action, so the matcher file is not found. We don't need it.
+        problem-matcher: false
 
     - name: Install workflow_tool dependencies
       shell: bash
