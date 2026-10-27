@@ -477,7 +477,7 @@ class RecordCommand extends Command<void> {
   @override
   String get invocation => '${super.invocation} <config-file> <checkout-dir> <repo-path>...\n\n'
       'Example:\n'
-      '  patch record patches.json /path/to/checkout . engine/src/flutter/third_party/dart';
+      '  patch record patches.json /path/to/checkout .';
 
   @override
   Future<void> run() async {

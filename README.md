@@ -1,94 +1,153 @@
-# flutter engine binaries for armv7, aarch64, x64
+# Flutter engine binaries for Linux x64
 
-This repo contains flutter engine binaries (in the https://github.com/ardera/flutter-engine-binaries-for-arm filesystem layout) for armv7 and aarch64.
-The binaries come in variants: generic, and tuned for the Pi 3, Pi 4, and Pi 5 CPUs.
+This repo builds Flutter engine binaries (`libflutter_engine.so`) for Linux x64,
+with fontconfig support, for use with custom embedders.
 
 # 📦 Downloads
 
-### **See [Releases](https://github.com/ardera/flutter_embedded/releases).**
+See [Releases](https://github.com/ardera/flutter_embedded/releases).
 
-*NOTE*: Some SDK versions, e.g. 3.19.1 are missing. In most cases, that means that SDK uses the same engine as the older release, so 3.19.0 in this case.
-The SDK semantic versions are only provided because they're a bit nicer to read than the raw engine commit hashes, but the engine commits are still the "single source of truth"
+The release contains three engine variants:
 
-# 🛠️ Build Config and Compiler Invocation
-## Build Config
-The engine build is configured with: [^2]
-```
-$ ./src/flutter/tools/gn \
-  --runtime-mode <debug / profile / release> \
-  [--unoptimized]
+| variant | runtime | optimization | debug symbols | sanitizers |
+| - | - | - | - | - |
+| `release-fast` | release | speed | yes, in `libflutter_engine.so` | none |
+| `release-small` | release | size (`--optimize-for-size`) | no, stripped | none |
+| `debug` | debug, unoptimized | none | yes, in `libflutter_engine.so` | ASan, LSan, UBSan |
+
+Each bundle contains:
+
+- `libflutter_engine.so`
+- `gen_snapshot`
+- `icudtl.dat`
+- `flutter_embedder.h`
+- `flutter.version`
+- `dart-sdk.version`
+- `compile_commands.json`
+
+# 🛠️ Build Config
+
+From `flutter/engine/src`, the engine is configured with:
+
+```sh
+$ ./flutter/tools/gn \
+  --runtime-mode <release / debug> \
+  [--optimize-for-size] \
+  [--unoptimized] \
   --target-os linux \
-  --linux-cpu <arm / arm64 / x64> \
-  [--arm-float-abi hard] \
+  --linux-cpu x64 \
   --target-dir build \
   --embedder-for-target \
   --disable-desktop-embeddings \
   --no-build-glfw-shell \
   --no-build-embedder-examples \
-  --no-goma
+  --no-enable-unittests \
+  --enable-minimal-linux \
+  --enable-fontconfig \
+  --no-goma \
+  [--stripped / --no-stripped] \
+  [--asan --lsan --ubsan]
 ```
 
-After that, the following args are added to the `args.gn` file for armv7/aarch64 without any CPU-specific tuning:
-```
-arm_cpu = "generic"
-arm_tune = "generic"
-```
+The variants are:
 
-When tuning for pi 3:
-```
-arm_cpu = "cortex-a53+nocrypto"
-arm_tune = "cortex-a53"
-```
+| variant | flags |
+| - | - |
+| `release-fast` | `--runtime-mode release --no-stripped` |
+| `release-small` | `--runtime-mode release --optimize-for-size --stripped` |
+| `debug` | `--runtime-mode debug --unoptimized --no-stripped --asan --lsan --ubsan` |
 
-When tuning for pi 4:
-```
-arm_cpu = "cortex-a72+nocrypto"
-arm_tune = "cortex-a72"
-```
+`--enable-fontconfig` sets both `skia_use_fontconfig` and
+`flutter_use_fontconfig`. This makes the engine use
+`SkFontMgr_New_FontConfig` instead of scanning `/usr/share/fonts` directly, and
+links `libfontconfig.so`.
 
-When tuning for pi 5:
-```
-arm_cpu = "cortex-a76"
-arm_tune = "cortex-a76"
+Then build the targets:
+
+```sh
+ninja -C out/build libflutter_engine.so gen_snapshot flutter_embedder.h icudtl.dat
 ```
 
-For both armv7 and aarch64, the engine is built against the sysroot provided by the engine build scripts, which is some debian sid sysroot from 2020.
-(See https://github.com/flutter/buildroot/blob/master/build/linux/sysroot_scripts/install-sysroot.py)
+The engine is built against the Debian sid sysroot provided by the engine build
+scripts. Only the `amd64` sysroot is needed.
 
-## Compiler Invocation
-This will result in the clang compiler being invoked with the following args:
+## Debug symbols
 
-| artifact        | compiler arguments                                                           |
-| --------------- | ---------------------------------------------------------------------------- |
-| armv7-generic   | `--target=armv7-linux-gnueabihf    -mcpu=generic             -mtune=generic`    |
-| pi4             | `--target=armv7-linux-gnueabihf    -mcpu=cortex-a72+nocrypto -mtune=cortex-a72`[^1] |
-| pi3             | `--target=armv7-linux-gnueabihf    -mcpu=cortex-a53+nocrypto -mtune=cortex-a53`[^3] |
-| aarch64-generic | `--target=aarch64-linux-gnu        -mcpu=generic             -mtune=generic`    |
-| pi4-64          | `--target=aarch64-linux-gnu        -mcpu=cortex-a72+nocrypto -mtune=cortex-a72`[^1] |
-| pi5-64          | `--target=aarch64-linux-gnu        -mcpu=cortex-a76          -mtune=cortex-a76`     |
-| pi3-64          | `--target=aarch64-linux-gnu        -mcpu=cortex-a53+nocrypto -mtune=cortex-a53`[^3] |
-| x64-generic     | `--target=x86_64-unknown-linux-gnu -mcpu=generic             -mtune=generic` |
+`release-fast` and `debug` keep debug symbols in `libflutter_engine.so`.
+`release-small` is stripped.
 
-## Debug Symbols
+The engine patches make every build emit `-ggdb -fdebug-default-version=4`
+regardless of the selected symbol level. The final strip is controlled by
+`--stripped` / `--no-stripped`.
 
-Some modifications are made to the engine build scripts so it's always built with `-ggdb -fdebug-default-version=4`.
-The debug symbols are then split into a separate file using:
-```bash
-$ objcopy --only-keep-debug libflutter_engine.so libflutter_engine.so.dbgsyms
-$ objcopy --strip-debug libflutter_engine.so
-$ objcopy --add-gnu-debuglink=libflutter_engine.{debug/profile/release/debug_unopt}.dbgsyms libflutter_engine.so
+## Sanitizers
+
+The `debug` variant is built with AddressSanitizer, LeakSanitizer and
+UndefinedBehaviorSanitizer. MSan and TSan are not included because they cannot
+be combined with ASan or with each other in a single build.
+
+If you load the sanitizer-instrumented engine into a non-instrumented embedder,
+you may need to preload the matching sanitizer runtime, for example:
+
+```sh
+LD_PRELOAD=$(clang -print-file-name=libasan.so) ./your-embedder
 ```
 
-That means you can just later download the debug symbols when you need them and step through the engine source code.
+# 🩹 Patches
 
-However, the resulting `libflutter_engine.so` is ~4MBs larger than one that has _all_ (not only debug symbols) stripped.
-So, if you want to save a few more megabytes you can strip them using:
-```bash
-objcopy --strip-unneeded libflutter_engine.so
+Only three engine patches are applied:
+
+- `0002-always-include-debug-symbols.patch` — always emit debug symbols.
+- `0007-don-t-use-vulkan-xcb-wayland-wsi-integrations.patch` — disable Vulkan
+  XCB/Wayland WSI.
+- `0009-disable-angle-x11-wayland-wsi-for-linux-target-builds.patch` — disable
+  ANGLE X11/Wayland WSI for Linux target builds.
+
+The X11/Wayland WSI integrations are not needed for a custom embedder: the
+embedder owns the window and the `VkSurfaceKHR`, and the engine only renders to
+it. Disabling them avoids X11/XCB/Wayland build and runtime dependencies and
+avoids GN failures caused by undefined Wayland configuration.
+
+# 🖋️ Fonts / fontconfig
+
+The engine links `libfontconfig.so.1`. The target system needs fontconfig and at
+least one installed font:
+
+```sh
+sudo apt install fontconfig fonts-dejavu-core
+sudo fc-cache -f
 ```
 
-[^1]: The CPU of the Raspberry Pi 4 is a Cortex-A72. `+nocrypto` is specified for `-mcpu` because the A72 in the Pi 4 is (_apparently_) the only A72 in the world that doesn't support cryptography instructions: https://github.com/ardera/flutter-ci/issues/3#issuecomment-1272330857
+Verify the setup:
 
-[^3]: Pi 3 doesn't support cryptography extensions either.
+```sh
+fc-match sans
+ldd libflutter_engine.so
+readelf -d libflutter_engine.so | grep fontconfig
+```
 
-[^2]: `--arm-float-abi hard` is only specified when building for armv7, `--unoptimized` is only specified for unoptimized debug builds.
+The engine's default font families are:
+
+```text
+Ubuntu, Adwaita Sans, Cantarell, DejaVu Sans, Liberation Sans, Arial
+```
+
+At least one of these (or a fontconfig alias to one) should resolve.
+
+# ✅ Verifying the build
+
+```sh
+# fontconfig dependency
+readelf -d libflutter_engine.so | grep fontconfig
+
+# symbols
+file libflutter_engine.so
+readelf -S libflutter_engine.so | grep '\.debug_'
+```
+
+Expected:
+
+- `release-fast`: `with debug_info, not stripped`, `.debug_*` sections present
+- `release-small`: `stripped`, no `.debug_*` sections
+- `debug`: `with debug_info, not stripped`, `.debug_*` sections present, plus
+  ASan/LSan/UBSan instrumentation
