@@ -9,11 +9,11 @@ See [Releases](https://github.com/ardera/flutter_embedded/releases).
 
 The release contains three engine variants:
 
-| variant | runtime | optimization | debug symbols | sanitizers |
-| - | - | - | - | - |
-| `release-fast` | release | speed | yes, in `libflutter_engine.so` | none |
-| `release-small` | release | size (`--optimize-for-size`) | no, stripped | none |
-| `debug` | debug, unoptimized | none | yes, in `libflutter_engine.so` | ASan, LSan, UBSan |
+| variant | runtime | optimization | debug symbols |
+| - | - | - | - |
+| `release-fast` | release | speed | yes, in `libflutter_engine.so` |
+| `release-small` | release | size (`--optimize-for-size`) | no, stripped |
+| `debug` | debug, unoptimized | none | yes, in `libflutter_engine.so` |
 
 Each bundle contains:
 
@@ -45,8 +45,7 @@ $ ./flutter/tools/gn \
   --enable-minimal-linux \
   --enable-fontconfig \
   --no-goma \
-  [--stripped / --no-stripped] \
-  [--asan --lsan --ubsan]
+  [--stripped / --no-stripped]
 ```
 
 The variants are:
@@ -55,7 +54,7 @@ The variants are:
 | - | - |
 | `release-fast` | `--runtime-mode release --no-stripped` |
 | `release-small` | `--runtime-mode release --optimize-for-size --stripped` |
-| `debug` | `--runtime-mode debug --unoptimized --no-stripped --asan --lsan --ubsan` |
+| `debug` | `--runtime-mode debug --unoptimized --no-stripped` |
 
 `--enable-fontconfig` sets both `skia_use_fontconfig` and
 `flutter_use_fontconfig`. This makes the engine use
@@ -79,19 +78,6 @@ scripts. Only the `amd64` sysroot is needed.
 The engine patches make every build emit `-ggdb -fdebug-default-version=4`
 regardless of the selected symbol level. The final strip is controlled by
 `--stripped` / `--no-stripped`.
-
-## Sanitizers
-
-The `debug` variant is built with AddressSanitizer, LeakSanitizer and
-UndefinedBehaviorSanitizer. MSan and TSan are not included because they cannot
-be combined with ASan or with each other in a single build.
-
-If you load the sanitizer-instrumented engine into a non-instrumented embedder,
-you may need to preload the matching sanitizer runtime, for example:
-
-```sh
-LD_PRELOAD=$(clang -print-file-name=libasan.so) ./your-embedder
-```
 
 # 🩹 Patches
 
@@ -149,5 +135,4 @@ Expected:
 
 - `release-fast`: `with debug_info, not stripped`, `.debug_*` sections present
 - `release-small`: `stripped`, no `.debug_*` sections
-- `debug`: `with debug_info, not stripped`, `.debug_*` sections present, plus
-  ASan/LSan/UBSan instrumentation
+- `debug`: `with debug_info, not stripped`, `.debug_*` sections present

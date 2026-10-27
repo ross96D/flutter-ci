@@ -1,0 +1,177 @@
+name: Build Flutter engine
+description: Build the Flutter engine for Linux x64 with the shared build steps.
+
+inputs:
+  variant:
+    description: Build variant name
+    required: true
+  runtime-mode:
+    description: Flutter runtime mode
+    required: true
+  optimize-for-size:
+    description: Whether to optimize for size
+    required: true
+  unoptimized:
+    description: Whether to build an unoptimized debug engine
+    required: true
+  stripped:
+    description: Whether to strip the engine
+    required: true
+  engine-hash:
+    description: Flutter engine commit hash
+    required: true
+  semver:
+    description: Flutter SDK version
+    required: false
+  googlesource-cookie:
+    description: googlesource git cookie
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Configure git
+      shell: bash
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --global core.autocrlf false
+        git config --global core.filemode false
+        git config --global core.preloadindex true
+
+    - name: Log engine version & Build config
+      shell: bash
+      run: |
+        echo '*** flutter engine hash: ***'
+        echo "${{ inputs.engine-hash }}"
+        echo '*** flutter version: ***'
+        echo "${{ inputs.semver }}"
+
+        echo '*** build variant: ***'
+        echo name: ${{ inputs.variant }}
+        echo runtime-mode: ${{ inputs.runtime-mode }}
+        echo optimize-for-size: ${{ inputs.optimize-for-size }}
+        echo unoptimized: ${{ inputs.unoptimized }}
+        echo stripped: ${{ inputs.stripped }}
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build
+
+    - name: Cache depot tools
+      id: cache-depot-tools
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ github.workspace }}/depot_tools
+        key: ${{ runner.os }}-${{ runner.arch }}-depot-tools
+
+    - name: Populate googlesource git cookies
+      shell: bash
+      env:
+        GOOGLESOURCE_COOKIE: ${{ inputs.googlesource-cookie }}
+      run: |
+        if [ -n "$GOOGLESOURCE_COOKIE" ]; then
+          eval "$GOOGLESOURCE_COOKIE"
+        fi
+
+    - name: Clone depot tools
+      if: steps.cache-depot-tools.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        git clone --depth 1 \
+          https://chromium.googlesource.com/chromium/tools/depot_tools.git \
+          ./depot_tools
+
+    - name: add depot_tools to path
+      shell: bash
+      run: |
+        echo "${{ github.workspace }}/depot_tools" >> $GITHUB_PATH
+
+    - name: Run gclient --version
+      shell: bash
+      env:
+        DEPOT_TOOLS_UPDATE: 1
+      run: |
+        gclient --version
+
+    - name: Download cached engine sources
+      uses: actions/cache/restore@v4
+      id: cache
+      env:
+        SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+      with:
+        path: flutter
+        key: flutter-${{ inputs.engine-hash }}-${{ runner.os }}-${{ runner.arch }}
+        fail-on-cache-miss: true
+
+    - name: Setup Dart SDK
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: stable
+
+    - name: Install workflow_tool dependencies
+      shell: bash
+      working-directory: workflow_tool
+      run: dart pub get
+
+    - name: Tag flutter repository
+      shell: bash
+      working-directory: flutter
+      run: |
+        # Tag the Flutter repo at current commit
+        git tag -f unpatched-flutter
+
+    - name: Apply patches
+      shell: bash
+      run: |
+        dart run $GITHUB_WORKSPACE_UNIX/workflow_tool/bin/patch.dart apply \
+          $GITHUB_WORKSPACE_UNIX/patches/patches.json \
+          $GITHUB_WORKSPACE_UNIX/flutter
+
+    - name: Soft reset flutter repository
+      shell: bash
+      working-directory: flutter
+      run: |
+        # Soft reset Flutter repo to preserve version but keep changes
+        git reset --soft unpatched-flutter
+
+    - name: Configure engine
+      shell: bash
+      working-directory: flutter/engine/src
+      run: |
+        ./flutter/tools/gn \
+          --runtime-mode ${{ inputs.runtime-mode }} \
+          --target-os linux \
+          --linux-cpu x64 \
+          --target-dir build \
+          --embedder-for-target \
+          --disable-desktop-embeddings \
+          --no-build-glfw-shell \
+          --no-build-embedder-examples \
+          --no-enable-unittests \
+          --enable-minimal-linux \
+          --enable-fontconfig \
+          --no-goma \
+          ${{ inputs.unoptimized == 'true' && '--unoptimized' || '' }} \
+          ${{ inputs.optimize-for-size == 'true' && '--optimize-for-size' || '' }} \
+          ${{ inputs.stripped == 'true' && '--stripped' || '--no-stripped' }}
+
+    - name: Build engine
+      shell: bash
+      working-directory: flutter/engine/src/out/build
+      run: |
+        ninja libflutter_engine.so gen_snapshot flutter_embedder.h icudtl.dat
+
+    - name: Add flutter.version and dart-sdk.version file
+      shell: bash
+      run: |
+        pushd $GITHUB_WORKSPACE_UNIX/flutter
+        git rev-parse HEAD > $BUILD_DIR/flutter.version
+        popd
+
+        pushd $GITHUB_WORKSPACE_UNIX/flutter/engine/src/flutter/third_party/dart
+        git rev-parse HEAD > $BUILD_DIR/dart-sdk.version
+        popd
