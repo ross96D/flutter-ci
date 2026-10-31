@@ -249,33 +249,31 @@ jobs:
 
       - name: Package engine
         run: |
-          mkdir -p pkg
+          tar -cJvf engine.${{ matrix.name }}.tar.xz \
+            -C "$BUILD_DIR" libflutter_engine.so
 
-          pushd pkg
-          cp \
-            $BUILD_DIR/libflutter_engine.so \
-            $BUILD_DIR/gen_snapshot \
-            $BUILD_DIR/icudtl.dat \
-            $BUILD_DIR/flutter_embedder.h \
-            $BUILD_DIR/flutter.version \
-            $BUILD_DIR/dart-sdk.version \
-            $BUILD_DIR/compile_commands.json \
-            .
-
-          tar -cJvf ../linux-x64-${{ matrix.name }}.tar.xz *
-          popd
+      - name: Package common data
+        if: matrix.name == 'release-fast'
+        run: |
+          tar -cJvf common.tar.xz -C "$BUILD_DIR" \
+            flutter_embedder.h \
+            gen_snapshot \
+            icudtl.dat \
+            flutter.version \
+            dart-sdk.version
 
       - name: Upload engine
         uses: actions/upload-artifact@v4
         with:
-          name: linux-x64-${{ matrix.name }}
-          path: pkg/*
+          name: engine-${{ matrix.name }}-tar-xz
+          path: engine.${{ matrix.name }}.tar.xz
 
-      - name: Upload engine (.tar.xz)
+      - name: Upload common data
+        if: matrix.name == 'release-fast'
         uses: actions/upload-artifact@v4
         with:
-          name: linux-x64-${{ matrix.name }}-tar-xz
-          path: linux-x64-${{ matrix.name }}.tar.xz
+          name: common-tar-xz
+          path: common.tar.xz
 
   release:
     name: "Publish release"
@@ -293,28 +291,30 @@ jobs:
 
       - run: |
           mkdir -p release-files
-          mv all-artifacts/*-tar-xz/* release-files/
+          mv all-artifacts/*-tar-xz/*.tar.xz release-files/
 
       # Show the complete file tree, and print all metadata (permissions, owner, group, filesize, last modification date)
       - name: Show file tree
         run: |
           sudo apt-get install -y tree
-          tree -apugshDF
+          tree -apugshDF release-files
 
       - uses: softprops/action-gh-release@v2
         if: ${{ needs.resolve-version.outputs.is-stable == 'true' || needs.resolve-version.outputs.is-beta == 'true'}}
         with:
           name: ${{ needs.resolve-version.outputs.semver || needs.resolve-version.outputs.engine-hash }}
           body: |
-            | variant | runtime | optimization | debug symbols |
+            | asset | runtime | optimization | debug symbols |
             | - | - | - | - |
-            | `release-fast` | release | speed | yes, in `.so` |
-            | `release-small` | release | size (`--optimize-for-size`) | no, stripped |
-            | `debug` | debug, unoptimized | none | yes, in `.so` |
+            | `engine.release-fast.tar.xz` | release | speed | yes, in `.so` |
+            | `engine.release-small.tar.xz` | release | size (`--optimize-for-size`) | no, stripped |
+            | `engine.debug.tar.xz` | debug, unoptimized | none | yes, in `.so` |
 
-            Each bundle contains `libflutter_engine.so`, `gen_snapshot`, `icudtl.dat`,
-            `flutter_embedder.h`, `flutter.version`, `dart-sdk.version` and
-            `compile_commands.json`.
+            Each engine archive contains `libflutter_engine.so`.
+
+            `common.tar.xz` contains `flutter_embedder.h`, `gen_snapshot`,
+            `icudtl.dat`, `flutter.version` and `dart-sdk.version`. The
+            `gen_snapshot` is the release build and is shared by all engines.
 
             | name | info | reference |
             | - | - | - |

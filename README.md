@@ -7,23 +7,23 @@ with fontconfig support, for use with custom embedders.
 
 See [Releases](https://github.com/ardera/flutter_embedded/releases).
 
-The release contains three engine variants:
+The release contains one archive per engine variant:
 
-| variant         | runtime            | optimization                 | debug symbols                  |
-| --------------- | ------------------ | ---------------------------- | ------------------------------ |
-| `release-fast`  | release            | speed                        | yes, in `libflutter_engine.so` |
-| `release-small` | release            | size (`--optimize-for-size`) | no, stripped                   |
-| `debug`         | debug, unoptimized | none                         | yes, in `libflutter_engine.so` |
+| asset                       | variant         | runtime            | optimization                 | debug symbols                  |
+| --------------------------- | --------------- | ------------------ | ---------------------------- | ------------------------------ |
+| `engine.release-fast.tar.xz`  | `release-fast`  | release            | speed                        | yes, in `libflutter_engine.so` |
+| `engine.release-small.tar.xz` | `release-small` | release            | size (`--optimize-for-size`) | no, stripped                   |
+| `engine.debug.tar.xz`         | `debug`         | debug, unoptimized | none                         | yes, in `libflutter_engine.so` |
 
-Each bundle contains:
+Each engine archive contains only `libflutter_engine.so`.
 
-- `libflutter_engine.so`
-- `gen_snapshot`
-- `icudtl.dat`
+The shared data is in `common.tar.xz`:
+
 - `flutter_embedder.h`
+- `gen_snapshot` (release build, shared by all engines)
+- `icudtl.dat`
 - `flutter.version`
 - `dart-sdk.version`
-- `compile_commands.json`
 
 # 🛠️ Build Config
 
