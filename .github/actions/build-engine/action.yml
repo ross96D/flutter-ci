@@ -58,7 +58,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build
+        sudo apt-get install -y ninja-build patchelf
 
     - name: Cache depot tools
       id: cache-depot-tools
@@ -168,6 +168,11 @@ runs:
       working-directory: flutter/engine/src/out/build
       run: |
         ninja libflutter_engine.so gen_snapshot flutter_embedder.h icudtl.dat
+
+    - name: Set engine rpath
+      shell: bash
+      run: |
+        patchelf --set-rpath '$ORIGIN' "$BUILD_DIR/libflutter_engine.so"
 
     - name: Add flutter.version and dart-sdk.version file
       shell: bash

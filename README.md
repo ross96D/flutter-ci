@@ -9,11 +9,11 @@ See [Releases](https://github.com/ardera/flutter_embedded/releases).
 
 The release contains three engine variants:
 
-| variant | runtime | optimization | debug symbols |
-| - | - | - | - |
-| `release-fast` | release | speed | yes, in `libflutter_engine.so` |
-| `release-small` | release | size (`--optimize-for-size`) | no, stripped |
-| `debug` | debug, unoptimized | none | yes, in `libflutter_engine.so` |
+| variant         | runtime            | optimization                 | debug symbols                  |
+| --------------- | ------------------ | ---------------------------- | ------------------------------ |
+| `release-fast`  | release            | speed                        | yes, in `libflutter_engine.so` |
+| `release-small` | release            | size (`--optimize-for-size`) | no, stripped                   |
+| `debug`         | debug, unoptimized | none                         | yes, in `libflutter_engine.so` |
 
 Each bundle contains:
 
@@ -50,11 +50,11 @@ $ ./flutter/tools/gn \
 
 The variants are:
 
-| variant | flags |
-| - | - |
-| `release-fast` | `--runtime-mode release --no-stripped` |
+| variant         | flags                                                   |
+| --------------- | ------------------------------------------------------- |
+| `release-fast`  | `--runtime-mode release --no-stripped`                  |
 | `release-small` | `--runtime-mode release --optimize-for-size --stripped` |
-| `debug` | `--runtime-mode debug --unoptimized --no-stripped` |
+| `debug`         | `--runtime-mode debug --unoptimized --no-stripped`      |
 
 `--enable-fontconfig` sets both `skia_use_fontconfig` and
 `flutter_use_fontconfig`. This makes the engine use
@@ -69,6 +69,11 @@ ninja -C out/build libflutter_engine.so gen_snapshot flutter_embedder.h icudtl.d
 
 The engine is built against the Debian sid sysroot provided by the engine build
 scripts. Only the `amd64` sysroot is needed.
+
+## Rpath
+
+`libflutter_engine.so` is patched with `patchelf` so it can load shared
+libraries placed next to it:
 
 ## Debug symbols
 
